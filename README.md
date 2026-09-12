@@ -1,6 +1,7 @@
 # ⛪ 教會數位看板系統 (Church Digital Signage)
 
 [English Description below](#english-description)
+[Demo Video below](#demo-video)
 
 這是一個專為教會設計的輕量級數位看板系統，旨在解決主日崇拜與日常聚會中的資訊輪播與備用串流需求。
 
@@ -46,6 +47,7 @@ A lightweight digital signage system designed for churches, aimed at handling in
 ## 📄 License
 This project is licensed under the [MIT License](LICENSE). Feel free to use, modify, and distribute.
 
+<a name="demo-video"></a>
 ## 📺 示範影片與操作指南 (Video Demos & Guides)
 
 點擊下方圖片即可觀看 YouTube 操作示範影片：
