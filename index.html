@@ -1,0 +1,939 @@
+<!-- ================================================================= -->
+<!-- PROJECT: Church Information & Digital Signage Board               -->
+<!-- VERSION: v2.9.7-2026.09                                           -->
+<!-- CREATOR & ARCHITECT: Wong Hui Shan (https://media.song4kids.com)  -->
+<!-- AI ASSISTANT: Generated & Refined in collaboration with Gemini    -->
+<!-- LICENSE: Open Source / Free to use for churches and communities   -->
+<!-- DESCRIPTION: Real-time dual-screen signage system integrating     -->
+<!-- Google Slides, Dual-Mode Relay (Webcam/YouTube), Weather API,     -->
+<!-- Announcements Ticker, and Dynamic Content Modes                   -->
+<!-- ================================================================= -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Church Information Board</title>
+    <style>
+        /* Global CSS Reset & Layout Setup */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+            width: 100vw; height: 100vh; overflow: hidden;
+            display: flex; background-color: #000;
+        }
+
+        /* Fullscreen Audio & Display Activation Overlay */
+        #start-overlay {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background-color: rgba(0, 0, 0, 0.9); z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; text-align: center; padding: 20px;
+        }
+        .start-btn {
+            margin-top: 20px; padding: 20px 50px; font-size: 2.5rem; font-weight: bold;
+            background-color: #e52b2b; color: white;
+            border: none; border-radius: 10px; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(229, 43, 43, 0.5); transition: transform 0.2s;
+        }
+        .start-btn:hover { transform: scale(1.05); }
+
+        /* Left Main Panel (75% width for Slides, Live Stream & Ticker) */
+        .left-panel { width: 75%; height: 100%; display: flex; flex-direction: column; }
+        
+        .main-screen {
+            width: 100%; height: auto; aspect-ratio: 16 / 9; flex-shrink: 0; 
+            background-color: #000; color: white;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            position: relative;
+            overflow: hidden; 
+        }
+        
+        /* Google Slides Embed Frame */
+        #slides-frame {
+            position: absolute; top: -20px; left: 0; width: 100%; height: calc(100% + 75px); border: none;
+            display: block;
+        }
+
+        /* Local Webcam Video Element (getUserMedia) */
+        #live-video {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
+            display: none; background-color: #000; transform: scaleX(-1);
+        }
+
+        /* YouTube Live Embed Frame */
+        #youtube-frame {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;
+            display: none; background-color: #000;
+        }
+        
+        /* Lower Third Overlay for Live Stream / YouTube */
+        .lower-third {
+            position: absolute; bottom: 40px; left: 50px; background-color: rgba(0, 0, 0, 0.75); padding: 15px 40px;
+            border-left: 10px solid #f1c40f; border-radius: 5px; font-size: 2.5rem; font-weight: bold; box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+            z-index: 10; display: none; color: white;
+        }
+        
+        /* Bottom Ticker Area */
+        .ticker-area {
+            flex-grow: 1; background-color: #95a5a6; position: relative;
+            display: flex; justify-content: center; align-items: center; overflow: hidden;
+        }
+        .msg-container {
+            position: absolute; width: 90%; text-align: left; opacity: 0; transition: opacity 1.5s ease-in-out;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .msg-container.active { opacity: 1; }
+        .msg-zh { font-size: 3rem; font-weight: bold; color: #222; }
+        .msg-en { font-size: 1.8rem; color: #444; margin-top: 8px; font-weight: 500; }
+
+        /* Right Side Panel (25% width for Clock, Weather & Content White Zone) */
+        .right-panel { width: 25%; height: 100%; display: flex; flex-direction: column; }
+        
+        /* Clock & Date Widget */
+        .datetime-area { height: 20%; background-color: #f1c40f; color: #333; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .date { font-size: 2.2rem; font-weight: bold; }
+        .time { font-size: 5.5rem; font-weight: bold; line-height: 1.1; }
+        
+        /* Weather Widget (Optimized to 18%) */
+        .weather-area { height: 18%; background-color: #27ae60; color: white; display: flex; justify-content: center; align-items: center; gap: 20px; }
+        .weather-icon { font-size: 5rem; } 
+        .weather-info { text-align: center; }
+        .temp { font-size: 4rem; font-weight: bold; line-height: 1; } 
+        .desc-zh { font-size: 1.6rem; font-weight: bold; margin-top: 3px; } 
+        .desc-en { font-size: 1.2rem; opacity: 0.9; margin-top: 2px; }
+        
+        /* Information White Zone (Optimized to 62%) + Dark Mode Immunity */
+        .info-area { 
+            height: 62%; background-color: #ffffff !important; color: #333 !important; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            padding: 15px; text-align: center; position: relative; overflow: hidden;
+        }
+        .info-mode {
+            position: absolute; width: 90%; height: 90%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            opacity: 0; transition: opacity 1s ease-in-out; pointer-events: none;
+            background-color: #ffffff !important; color: #333 !important;
+        }
+        .info-mode.active { opacity: 1; pointer-events: auto; }
+
+        /* Dynamic Bilingual Title Container */
+        .dynamic-title-container {
+            width: 100%;
+            margin-bottom: 8px;
+            border-bottom: 3px solid #f1c40f;
+            padding-bottom: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .title-zh-line {
+            font-size: 1.6rem;
+            font-weight: bold;
+            color: #e52b2b;
+            line-height: 1.2;
+        }
+        .title-en-line {
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: #555;
+            margin-top: 3px;
+            line-height: 1.2;
+        }
+
+        /* Verse & Text Mode Shared Rotating Slide Layout */
+        .rotatable-content-box {
+            position: relative; 
+            width: 100%; 
+            flex-grow: 1; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+        }
+        .content-slide {
+            position: absolute; 
+            width: 100%; 
+            opacity: 0; 
+            transition: opacity 1s ease-in-out;
+            font-size: 2.2rem; 
+            font-weight: bold; 
+            line-height: 1.35; 
+            color: #333 !important;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center;
+        }
+        .content-slide.active { opacity: 1; }
+        
+        .content-slide.text-left {
+            align-items: flex-start;
+            text-align: left;
+            padding: 0 15px;
+        }
+
+        .verse-ref { 
+            font-size: 1.8rem; 
+            color: #555 !important; 
+            margin-top: 8px; 
+            font-weight: bold; 
+        }
+
+        /* QR Code Interrupt Layout */
+        .qr-image { 
+            width: 170px; 
+            height: 170px; 
+            border: none; 
+            border-radius: 8px; 
+            margin-bottom: 8px; 
+        }
+        .qr-instruction { 
+            font-size: 1.2rem; 
+            font-weight: bold; 
+            color: #27ae60; 
+        }
+
+        /* Image Mode Layout (Zero Title & Full Size) */
+        #mode-image .dynamic-title-container { display: none !important; }
+        .image-container { 
+            width: 100%; 
+            height: 100%; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+        }
+        .image-container img { 
+            max-width: 100%; 
+            max-height: 100%; 
+            object-fit: contain; 
+            border-radius: 6px; 
+        }
+
+        /* Room Schedule / Stacked Card Layout */
+        .room-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 2px; 
+        }
+        .room-table td { 
+            padding: 4px 6px; 
+            border-bottom: 1px solid #e0e0e0; 
+            color: #333 !important; 
+            text-align: left; 
+        }
+        .room-time-row {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #e52b2b;
+            background-color: #fcf3cf;
+            padding: 3px 6px !important;
+            border-top: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .room-badge { 
+            font-weight: bold; 
+            color: #27ae60; 
+            background-color: rgba(39, 174, 96, 0.1);
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 1.3rem;
+        }
+        .room-details-row-zh {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #222 !important;
+            padding: 3px 6px !important;
+        }
+        .room-details-row-en {
+            font-size: 1.2rem;
+            font-weight: 500;
+            color: #666 !important;
+            padding: 2px 6px 4px 6px !important;
+            border-bottom: 2px solid #ccc !important;
+        }
+        .room-page-indicator { 
+            font-size: 1.2rem; 
+            color: #666 !important; 
+            margin-top: 4px; 
+            font-weight: bold; 
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Fullscreen Permission Overlay -->
+    <div id="start-overlay">
+        <h1>Church Information Board</h1>
+        <p style="font-size: 1.2rem; margin-top: 10px; opacity: 0.8;">Please click the button below to enable fullscreen and audio playback permissions</p>
+        <button class="start-btn" onclick="startSignage()">Click to Start Information Board</button>
+    </div>
+
+    <!-- Left Screen Panel (Slides / Dual Relay & Ticker) -->
+    <div class="left-panel">
+        <div class="main-screen">
+            <iframe id="slides-frame" src="" frameborder="0" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
+            <video id="live-video" autoplay playsinline muted></video>
+            <iframe id="youtube-frame" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+            <div class="lower-third" id="lower-third">▶ Sunday Worship (Live)</div>
+        </div>
+        <div class="ticker-area" id="ticker-area">
+            <div style="font-size: 2rem; color: #333; font-weight: bold;">Loading Messages...</div>
+        </div>
+    </div>
+
+    <!-- Right Control Panel (Clock, Weather & Content White Zone) -->
+    <div class="right-panel">
+        <!-- Clock & Date Section -->
+        <div class="datetime-area">
+            <div class="date" id="current-date">DD/MM/YYYY</div>
+            <div class="time" id="current-time">00:00</div>
+        </div>
+        <!-- Weather Widget Section -->
+        <div class="weather-area">
+            <div class="weather-icon" id="w-icon">⌛</div>
+            <div class="weather-info" id="w-desc">
+                <div class="temp">--°</div>
+                <div class="desc-zh">Loading...</div>
+            </div>
+        </div>
+        
+        <!-- Content White Zone (Multi-Mode Display Area) -->
+        <div class="info-area">
+            <!-- Mode 1: Verse (Monthly Bible Verse) -->
+            <div class="info-mode" id="mode-verse">
+                <div class="dynamic-title-container">
+                    <div class="title-zh-line" id="verse-title-zh">本月金句</div>
+                    <div class="title-en-line" id="verse-title-en">Monthly Verse</div>
+                </div>
+                <div class="rotatable-content-box">
+                    <div class="content-slide active" id="verse-zh">Loading Verse...</div>
+                    <div class="content-slide" id="verse-en">Loading Verse...</div>
+                </div>
+            </div>
+
+            <!-- Mode 2: Image (Poster display mode) -->
+            <div class="info-mode" id="mode-image">
+                <div class="dynamic-title-container">
+                    <div class="title-zh-line" id="img-title-zh">宣傳海報</div>
+                    <div class="title-en-line" id="img-title-en">Poster</div>
+                </div>
+                <div class="image-container">
+                    <img id="display-image" src="" alt="Poster">
+                </div>
+            </div>
+
+            <!-- Mode 3: Text (Church announcements - Left Aligned) -->
+            <div class="info-mode" id="mode-text">
+                <div class="dynamic-title-container">
+                    <div class="title-zh-line" id="text-title-zh">堂務佈告</div>
+                    <div class="title-en-line" id="text-title-en">Church Announcements</div>
+                </div>
+                <div class="rotatable-content-box">
+                    <div class="content-slide active text-left" id="text-zh">Loading Text...</div>
+                    <div class="content-slide text-left" id="text-en">Loading Text...</div>
+                </div>
+            </div>
+
+            <!-- Mode 4: Room Schedule -->
+            <div class="info-mode" id="mode-room">
+                <div class="dynamic-title-container">
+                    <div class="title-zh-line" id="room-title-zh">聚會房間一覽表</div>
+                    <div class="title-en-line" id="room-title-en">Room Schedule & Directory</div>
+                </div>
+                <div style="width: 100%; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between;">
+                    <table class="room-table">
+                        <tbody id="room-table-body">
+                            <tr><td>Loading Schedule...</td></tr>
+                        </tbody>
+                    </table>
+                    <div class="room-page-indicator" id="room-page-indicator">Page 1 / 1</div>
+                </div>
+            </div>
+
+            <!-- Mode 5: QR Code Interrupt -->
+            <div class="info-mode" id="mode-qr">
+                <div class="dynamic-title-container">
+                    <div class="title-zh-line" id="qr-title-zh">崇拜程序表</div>
+                    <div class="title-en-line" id="qr-title-en">Service Bulletin</div>
+                </div>
+                <div style="width: 100%; flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <img class="qr-image" id="qr-image" src="" alt="QR Code">
+                    <div class="qr-instruction">Scan to Download</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Control & API Integration Hub -->
+    <script>
+        // ==========================================
+        // 🎛️ GLOBAL CONFIGURATION HUB
+        // ==========================================
+        const ENABLE_WEBCAM_RELAY = false; // Master Switch: If true, pre-acquires webcam permissions and warms up the stream at startup; if false, disables all webcam features (set to false for YouTube-only or Slides-only churches)
+
+        // Google Sheets CSV & Presentation Embed Links
+		const URL_SLIDES = "https://docs.google.com/presentation/d/e/YOUR_PRESENTATION_ID_HERE/pub?start=false&loop=false&delayms=7000";
+        const URL_CSV_ANNOUNCEMENTS = "https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID_HERE/pub?gid=0&single=true&output=csv";
+        const URL_CSV_MEDIA_SCHEDULE = "https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID_HERE/pub?gid=YOUR_GID_HERE&single=true&output=csv";
+        const URL_CSV_CONTENT_SCHEDULE = "https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID_HERE/pub?gid=YOUR_GID_HERE&single=true&output=csv";
+
+        // Playback Timers & Display Parameters
+        const TICKER_SPEED = 8000;         // Speed for bottom ticker announcements (milliseconds)
+        const CONTENT_SPEED = 6000;        // Unified speed for White Zone content rotation & pagination (milliseconds)
+        const ITEMS_PER_ROOM_PAGE = 4;     // Number of room schedule items per page
+        
+        // Local Weather Geolocation Coordinates (Open-Meteo API)
+        const WEATHER_LATITUDE = 22.288499606632467;  
+        const WEATHER_LONGITUDE = 114.1941540263822; 
+        // ==========================================
+
+        document.getElementById('slides-frame').src = URL_SLIDES;
+        let webcamStream = null;
+        let activeRelayType = null; // 'WEBCAM' or 'YOUTUBE' or null
+
+        // Initialize Fullscreen and Pre-acquire Webcam Permissions if enabled
+        async function startSignage() {
+            const doc = document.documentElement;
+            if (doc.requestFullscreen) { doc.requestFullscreen(); } 
+            else if (doc.webkitRequestFullscreen) { doc.webkitRequestFullscreen(); }
+            document.getElementById('start-overlay').style.display = 'none';
+
+            // If the webcam master switch is enabled, request permission and warm up the stream in the background at startup
+            if (ENABLE_WEBCAM_RELAY) {
+                try {
+                    webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1920, height: 1080 }, audio: true });
+                    const liveVideo = document.getElementById('live-video');
+                    liveVideo.srcObject = webcamStream;
+                    await liveVideo.play();
+                } catch (err) {
+                    console.warn("Webcam access denied or not available:", err);
+                }
+            }
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) { document.getElementById('start-overlay').style.display = 'flex'; }
+        });
+
+        // Real-time Clock & Date Engine
+        function updateTime() {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            document.getElementById('current-date').innerText = `${day}/${month}/${year}`;
+            
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('current-time').innerText = `${hours}:${minutes}`;
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // --- 1. Ticker Announcements Engine ---
+        let messages = [];
+        let currentMsgIndex = 0;
+        let messageInterval = null;
+
+        async function fetchMessages() {
+            const fetchUrl = URL_CSV_ANNOUNCEMENTS + '&_t=' + new Date().getTime();
+            try {
+                const response = await fetch(fetchUrl);
+                if (!response.ok) return;
+                const text = await response.text();
+                const rows = text.split(/\r?\n/);
+                const newMessages = [];
+                for (let i = 1; i < rows.length; i++) {
+                    const rowText = rows[i];
+                    if (!rowText.trim()) continue; 
+                    const cols = rowText.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(col => {
+                        let c = col.trim();
+                        if (c.startsWith('"') && c.endsWith('"')) c = c.substring(1, c.length - 1);
+                        return c;
+                    });
+                    if (cols.length >= 3 && cols[2].toUpperCase().includes('YES')) {
+                        newMessages.push({ zh: cols[0], en: cols[1] });
+                    }
+                }
+                if (newMessages.length > 0) {
+                    messages = newMessages;
+                    renderMessages();
+                }
+            } catch (error) {}
+        }
+
+        function renderMessages() {
+            const tickerArea = document.getElementById('ticker-area');
+            tickerArea.innerHTML = ''; 
+            messages.forEach((msg, index) => {
+                const div = document.createElement('div');
+                div.className = `msg-container ${index === 0 ? 'active' : ''}`; 
+                div.id = `msg-${index}`;
+                div.innerHTML = `<div class="msg-zh">${msg.zh}</div><div class="msg-en">${msg.en}</div>`;
+                tickerArea.appendChild(div);
+            });
+            currentMsgIndex = 0;
+            if (messageInterval) clearInterval(messageInterval);
+            if (messages.length > 1) messageInterval = setInterval(cycleMessages, TICKER_SPEED);
+        }
+
+        function cycleMessages() {
+            if (messages.length <= 1) return;
+            document.getElementById(`msg-${currentMsgIndex}`).classList.remove('active');
+            currentMsgIndex = (currentMsgIndex + 1) % messages.length;
+            document.getElementById(`msg-${currentMsgIndex}`).classList.add('active');
+        }
+        fetchMessages();
+        setInterval(fetchMessages, 300000);
+
+        // --- 2. Room Schedule Pagination Engine ---
+        let roomSchedules = [];
+        let currentRoomPage = 0;
+        let roomPageInterval = null;
+
+        async function fetchRoomSchedule(csvUrl) {
+            if (!csvUrl) return;
+            try {
+                const res = await fetch(csvUrl + '&_t=' + new Date().getTime());
+                const text = await res.text();
+                const rows = text.split(/\r?\n/);
+                const now = new Date();
+                const yyyy = now.getFullYear();
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                const todayStr = `${yyyy}/${mm}/${dd}`;
+                const todayStrAlt = `${yyyy}-${mm}-${dd}`;
+
+                const matched = [];
+                for (let i = 1; i < rows.length; i++) {
+                    const rowText = rows[i];
+                    if (!rowText.trim()) continue;
+                    const cols = rowText.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => {
+                        let col = c.trim();
+                        if (col.startsWith('"') && col.endsWith('"')) col = col.substring(1, col.length - 1);
+                        return col;
+                    });
+                    if (cols.length < 5) continue;
+                    const dateVal = cols[0];
+                    if (dateVal === todayStr || dateVal === todayStrAlt) {
+                        const [eventZh, eventEn] = formatBilingualText(cols[4], false, ' | ');
+                        matched.push({ start: cols[1], end: cols[2], room: cols[3], eventZh, eventEn });
+                    }
+                }
+                roomSchedules = matched;
+                renderRoomPage();
+            } catch (e) {}
+        }
+
+        function renderRoomPage() {
+            const tbody = document.getElementById('room-table-body');
+            const indicator = document.getElementById('room-page-indicator');
+            if (roomSchedules.length === 0) {
+                tbody.innerHTML = `<tr><td style="text-align:center; padding: 20px;">No events scheduled for today.</td></tr>`;
+                indicator.innerText = `Page 1 / 1`;
+                return;
+            }
+
+            const totalPages = Math.ceil(roomSchedules.length / ITEMS_PER_ROOM_PAGE);
+            if (currentRoomPage >= totalPages) currentRoomPage = 0;
+
+            const startIdx = currentRoomPage * ITEMS_PER_ROOM_PAGE;
+            const sliceItems = roomSchedules.slice(startIdx, startIdx + ITEMS_PER_ROOM_PAGE);
+
+            let html = '';
+            sliceItems.forEach(item => {
+                html += `
+                    <tr>
+                        <td class="room-time-row">
+                            <span>🕒 ${item.start} - ${item.end}</span>
+                            <span class="room-badge">${item.room}</span>
+                        </td>
+                    </tr>
+                    <tr><td class="room-details-row-zh">${item.eventZh}</td></tr>
+                    <tr><td class="room-details-row-en" style="${!item.eventEn ? 'display:none;' : ''}">${item.eventEn || ""}</td></tr>
+                `;
+            });
+            tbody.innerHTML = html;
+            indicator.innerText = `Page ${currentRoomPage + 1} / ${totalPages}`;
+        }
+
+        // --- 3. Main Schedule & Dual Relay Management (Webcam vs YouTube) ---
+        let activeRotationTimer = null;
+
+        function getYouTubeEmbedUrl(rawUrl) {
+            if (!rawUrl) return "";
+            let videoId = "";
+            if (rawUrl.includes("youtu.be/")) {
+                videoId = rawUrl.split("youtu.be/")[1].split("?")[0];
+            } else if (rawUrl.includes("watch?v=")) {
+                videoId = rawUrl.split("watch?v=")[1].split("&")[0];
+            } else if (rawUrl.includes("embed/")) {
+                videoId = rawUrl.split("embed/")[1].split("?")[0];
+            } else if (rawUrl.includes("/live/")) {
+                videoId = rawUrl.split("/live/")[1].split("?")[0];
+            } else {
+                videoId = rawUrl.trim();
+            }
+            // 加上 mute=1 確保時間到切換時，瀏覽器不會阻擋自動播放
+            return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0&enablejsapi=1`;
+        }
+
+        async function fetchAllSchedules() {
+            const now = new Date();
+            const daysMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const currentDayStr = daysMap[now.getDay()];
+            
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0'); 
+            const dd = String(now.getDate()).padStart(2, '0');      
+            const m = now.getMonth() + 1; 
+            const d = now.getDate();      
+            
+            const validDateStrings = [
+                `${yyyy}/${mm}/${dd}`, `${yyyy}-${mm}-${dd}`, `${yyyy}/${m}/${d}`, `${yyyy}-${m}-${d}`
+            ];
+            
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+            // A. Media Schedule (Dual Relay)
+            try {
+                const res = await fetch(URL_CSV_MEDIA_SCHEDULE + '&_t=' + new Date().getTime());
+                const text = await res.text();
+                const rows = text.split(/\r?\n/);
+                let matchedRelayType = null;
+                let lowerThirdText = "▶ Sunday Worship (Live)";
+                let youtubeUrl = "";
+
+                for (let i = 1; i < rows.length; i++) {
+                    const rowText = rows[i];
+                    if (!rowText.trim()) continue;
+                    const cols = rowText.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => {
+                        let col = c.trim();
+                        if (col.startsWith('"') && col.endsWith('"')) col = col.substring(1, col.length - 1);
+                        return col;
+                    });
+                    if (cols.length < 5) continue;
+
+                    const type = cols[0].toUpperCase();
+                    const condition = cols[1];
+                    const startTime = cols[2];
+                    const endTime = cols[3];
+                    const colE_Title = cols[4];
+                    const colF_Url = cols[5] || "";
+
+                    if (type === 'WEBCAM' || type === 'YOUTUBE' || type === 'LIVE') {
+                        let startMins = 0; let endMins = 1440;
+                        if (startTime.includes(':')) {
+                            const p = startTime.split(':');
+                            startMins = parseInt(p[0]) * 60 + parseInt(p[1]);
+                        }
+                        if (endTime.includes(':')) {
+                            const p = endTime.split(':');
+                            endMins = parseInt(p[0]) * 60 + parseInt(p[1]);
+                        }
+
+                        const isTimeMatch = currentMinutes >= startMins && currentMinutes <= endMins;
+                        let isConditionMatch = false;
+                        if (condition === currentDayStr || validDateStrings.includes(condition)) {
+                            isConditionMatch = true;
+                        }
+
+                        if (isTimeMatch && isConditionMatch) {
+                            matchedRelayType = (type === 'LIVE') ? 'WEBCAM' : type;
+                            if (colE_Title) lowerThirdText = colE_Title;
+                            youtubeUrl = colF_Url;
+                            break;
+                        }
+                    }
+                }
+
+                const slidesFrame = document.getElementById('slides-frame');
+                const liveVideo = document.getElementById('live-video');
+                const youtubeFrame = document.getElementById('youtube-frame');
+                const lowerThird = document.getElementById('lower-third');
+
+                // 1. WEBCAM Mode (Provided master switch is true and stream is ready)
+                if (matchedRelayType === 'WEBCAM' && activeRelayType !== 'WEBCAM') {
+                    if (ENABLE_WEBCAM_RELAY) {
+                        activeRelayType = 'WEBCAM';
+                        lowerThird.innerText = lowerThirdText;
+                        youtubeFrame.src = "";
+                        youtubeFrame.style.display = 'none';
+
+                        if (webcamStream) {
+                            liveVideo.srcObject = webcamStream;
+                            await liveVideo.play().catch(e => {});
+                        }
+                        slidesFrame.style.display = 'none';
+                        liveVideo.style.display = 'block';
+                        lowerThird.style.display = 'block';
+                    }
+                } 
+                // 2. YOUTUBE Mode (Even if webcam relay is disabled, YouTube streaming still works normally!)
+                else if (matchedRelayType === 'YOUTUBE' && activeRelayType !== 'YOUTUBE') {
+                    activeRelayType = 'YOUTUBE';
+                    liveVideo.style.display = 'none';
+
+                    lowerThird.innerText = lowerThirdText;
+                    const embedUrl = getYouTubeEmbedUrl(youtubeUrl);
+                    youtubeFrame.src = embedUrl;
+                    slidesFrame.style.display = 'none';
+                    youtubeFrame.style.display = 'block';
+                    lowerThird.style.display = 'block';
+                } 
+                // 3. Stop Relay (Return to Google Slides)
+                else if (!matchedRelayType && activeRelayType !== null) {
+                    activeRelayType = null;
+                    liveVideo.style.display = 'none';
+                    youtubeFrame.src = "";
+                    youtubeFrame.style.display = 'none';
+                    lowerThird.style.display = 'none';
+                    slidesFrame.style.display = 'block';
+                }
+            } catch (e) {}
+
+            // B. Content Schedule (White Zone Modes + QR Interrupt)
+            try {
+                const res = await fetch(URL_CSV_CONTENT_SCHEDULE + '&_t=' + new Date().getTime());
+                const text = await res.text();
+                const rows = text.split(/\r?\n/);
+                
+                let activeQrData = null;
+                let activeModeName = 'Verse';
+                let modeDatabase = {};
+
+                for (let i = 0; i < rows.length; i++) {
+                    const rowText = rows[i];
+                    if (!rowText.trim()) continue; 
+                    const cols = rowText.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => {
+                        let col = c.trim();
+                        if (col.startsWith('"') && col.endsWith('"')) col = col.substring(1, col.length - 1);
+                        return col;
+                    });
+                    
+                    if (cols.length < 5) continue; 
+                    const type = cols[0];      
+                    const condition = cols[1]; 
+                    const startTime = cols[2]; 
+                    const endTime = cols[3];   
+                    const title = cols[4];     
+                    const content = cols[5] || ""; 
+                    
+                    if (i === 1) {
+                        activeModeName = type; 
+                    } else if (type === 'Verse' || type === 'Image' || type === 'Text' || type === 'Room') {
+                        modeDatabase[type] = { title, content };
+                    } else if (type === 'QR' || type === 'Special' || type === 'Regular') {
+                        let startMins = 0; let endMins = 1440;
+                        if (startTime.includes(':')) {
+                            const p = startTime.split(':');
+                            startMins = parseInt(p[0]) * 60 + parseInt(p[1]);
+                        }
+                        if (endTime.includes(':')) {
+                            const p = endTime.split(':');
+                            endMins = parseInt(p[0]) * 60 + parseInt(p[1]);
+                        }
+                        
+                        const isTimeMatch = currentMinutes >= startMins && currentMinutes <= endMins;
+                        let isConditionMatch = false;
+                        if (condition === currentDayStr || condition === 'Regular') isConditionMatch = true;
+                        else if (validDateStrings.includes(condition)) isConditionMatch = true;
+                        
+                        if (isTimeMatch && isConditionMatch) {
+                            activeQrData = { title, content };
+                            break; 
+                        }
+                    }
+                }
+                
+                updateWhiteZoneUI(activeQrData, activeModeName, modeDatabase);
+            } catch (e) {}
+        }
+
+        // Smart Bilingual / Monolingual Text Splitter (Checks for ' | ')
+        function formatBilingualText(rawText, isVerse = false, delimiter = ' | ') {
+            if (!rawText) return ["", ""];
+            
+            if (!rawText.includes(delimiter)) {
+                let singleText = rawText.trim();
+                if (isVerse) {
+                    const match = singleText.match(/(.+?)\s*(\(.*\)|（.*）)$/);
+                    if (match) singleText = `${match[1].trim()}<div class="verse-ref">${match[2].trim()}</div>`;
+                }
+                return [singleText, ""];
+            }
+
+            const parts = rawText.split(delimiter);
+            let primary = parts[0] ? parts[0].trim() : "";
+            let secondary = parts[1] ? parts[1].trim() : "";
+            
+            if (isVerse) {
+                const match = primary.match(/(.+?)\s*(\(.*\)|（.*）)$/);
+                if (match) primary = `${match[1].trim()}<div class="verse-ref">${match[2].trim()}</div>`;
+                const matchSec = secondary.match(/(.+?)\s*(\(.*\)|（.*）)$/);
+                if (matchSec) secondary = `${matchSec[1].trim()}<div class="verse-ref">${matchSec[2].trim()}</div>`;
+            }
+            return [primary, secondary];
+        }
+
+        // Helper: Update dynamic titles with auto-detection
+        function setDynamicTitle(zhElemId, enElemId, rawTitle) {
+            const [zh, en] = formatBilingualText(rawTitle, false, ' | ');
+            document.getElementById(zhElemId).innerText = zh || "";
+            const enElem = document.getElementById(enElemId);
+            if (en) {
+                enElem.innerText = en;
+                enElem.style.display = "block";
+            } else {
+                enElem.style.display = "none";
+            }
+        }
+
+        // Smart Bilingual Rotation Engine (Handles single & dual language seamlessly)
+        function setupBilingualRotation(modePrefix, rawData, isVerse) {
+            const [zhContent, enContent] = formatBilingualText(rawData, isVerse, ' | ');
+            const zhEl = document.getElementById(`${modePrefix}-zh`);
+            const enEl = document.getElementById(`${modePrefix}-en`);
+
+            zhEl.innerHTML = zhContent;
+            
+            if (!enContent) {
+                zhEl.classList.add('active');
+                enEl.classList.remove('active');
+                enEl.innerHTML = "";
+                if (activeRotationTimer) { clearInterval(activeRotationTimer); activeRotationTimer = null; }
+                return;
+            }
+
+            enEl.innerHTML = enContent;
+            if (!activeRotationTimer) {
+                let isZhActive = true;
+                activeRotationTimer = setInterval(() => {
+                    if (!enContent) return;
+                    if (isZhActive) {
+                        zhEl.classList.remove('active'); 
+                        enEl.classList.add('active');
+                    } else {
+                        enEl.classList.remove('active'); 
+                        zhEl.classList.add('active');
+                    }
+                    isZhActive = !isZhActive;
+                }, CONTENT_SPEED);
+            }
+        }
+
+        // Render White Zone UI based on Active Mode & Interrupts
+        function updateWhiteZoneUI(activeQrData, activeModeName, modeDatabase) {
+            const modeVerse = document.getElementById('mode-verse');
+            const modeImage = document.getElementById('mode-image');
+            const modeText = document.getElementById('mode-text');
+            const modeRoom = document.getElementById('mode-room');
+            const modeQr = document.getElementById('mode-qr');
+
+            // Handle Room Schedule Pagination Timer using unified CONTENT_SPEED
+            if (activeModeName === 'Room') {
+                if (!roomPageInterval) {
+                    roomPageInterval = setInterval(() => {
+                        if (roomSchedules.length > ITEMS_PER_ROOM_PAGE) {
+                            currentRoomPage++;
+                            renderRoomPage();
+                        }
+                    }, CONTENT_SPEED);
+                }
+            } else {
+                if (roomPageInterval) { clearInterval(roomPageInterval); roomPageInterval = null; }
+            }
+
+            if (activeQrData) {
+                if (activeRotationTimer) { clearInterval(activeRotationTimer); activeRotationTimer = null; }
+                setDynamicTitle('qr-title-zh', 'qr-title-en', activeQrData.title);
+                document.getElementById('qr-image').src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(activeQrData.content)}`;
+                
+                modeVerse.classList.remove('active');
+                modeImage.classList.remove('active');
+                modeText.classList.remove('active');
+                modeRoom.classList.remove('active');
+                modeQr.classList.add('active');
+            } else {
+                modeQr.classList.remove('active');
+
+                if (activeModeName === 'Verse') {
+                    modeImage.classList.remove('active');
+                    modeText.classList.remove('active');
+                    modeRoom.classList.remove('active');
+                    modeVerse.classList.add('active');
+
+                    const vData = modeDatabase['Verse'] || { title: "本月金句 | Monthly Verse", content: "Loading..." };
+                    setDynamicTitle('verse-title-zh', 'verse-title-en', vData.title);
+                    setupBilingualRotation('verse', vData.content, true);
+
+                } else if (activeModeName === 'Text') {
+                    modeVerse.classList.remove('active');
+                    modeImage.classList.remove('active');
+                    modeRoom.classList.remove('active');
+                    modeText.classList.add('active');
+
+                    const tData = modeDatabase['Text'] || { title: "堂務佈告 | Church Announcements", content: "Loading..." };
+                    setDynamicTitle('text-title-zh', 'text-title-en', tData.title);
+                    setupBilingualRotation('text', tData.content, false);
+
+                } else {
+                    if (activeRotationTimer) { clearInterval(activeRotationTimer); activeRotationTimer = null; }
+
+                    if (activeModeName === 'Image') {
+                        modeVerse.classList.remove('active'); modeText.classList.remove('active'); modeRoom.classList.remove('active');
+                        modeImage.classList.add('active');
+                        const iData = modeDatabase['Image'] || { title: "宣傳海報 | Poster", content: "" };
+                        setDynamicTitle('img-title-zh', 'img-title-en', iData.title); 
+                        document.getElementById('display-image').src = iData.content;
+                    } else if (activeModeName === 'Room') {
+                        modeVerse.classList.remove('active'); modeImage.classList.remove('active'); modeText.classList.remove('active');
+                        modeRoom.classList.add('active');
+                        const rData = modeDatabase['Room'] || { title: "聚會房間一覽表 | Room Schedule & Directory", content: "" };
+                        setDynamicTitle('room-title-zh', 'room-title-en', rData.title);
+                        fetchRoomSchedule(rData.content);
+                    }
+                }
+            }
+        }
+
+        fetchAllSchedules();
+        setInterval(fetchAllSchedules, 30000);
+
+        // --- 4. Open-Meteo Weather API Integration ---
+        async function fetchWeather() {
+            try {
+                const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_LATITUDE}&longitude=${WEATHER_LONGITUDE}&current_weather=true`);
+                const data = await response.json();
+                const temp = Math.round(data.current_weather.temperature);
+                const code = data.current_weather.weathercode;
+                
+                let icon = '🌡️'; let descZh = '未知'; let descEn = 'Unknown';
+                switch (code) {
+                    case 0: icon = '☀️'; descZh = '晴朗'; descEn = 'Clear'; break;
+                    case 1: icon = '🌤️'; descZh = '大致天晴'; descEn = 'Mostly Clear'; break;
+                    case 2: icon = '⛅'; descZh = '部分多雲'; descEn = 'Partly Cloudy'; break;
+                    case 3: icon = '☁️'; descZh = '密雲'; descEn = 'Overcast'; break;
+                    case 45: case 48: icon = '🌫️'; descZh = '有霧'; descEn = 'Foggy'; break;
+                    case 51: case 53: case 55: icon = '🌦️'; descZh = '毛毛雨'; descEn = 'Drizzle'; break;
+                    case 61: icon = '🌧️'; descZh = '小雨'; descEn = 'Light Rain'; break;
+                    case 63: icon = '🌧️'; descZh = '中雨'; descEn = 'Moderate Rain'; break;
+                    case 65: icon = '🌧️'; descZh = '大雨'; descEn = 'Heavy Rain'; break;
+                    case 71: case 73: case 75: case 77: icon = '❄️'; descZh = '下雪'; descEn = 'Snow'; break;
+                    case 80: case 81: case 82: icon = '🌦️'; descZh = '陣雨'; descEn = 'Showers'; break;
+                    case 95: case 96: case 99: icon = '⛈️'; descZh = '雷雨'; descEn = 'Thunderstorm'; break;
+                    default: icon = '🌡️'; descZh = '未知'; descEn = 'Unknown'; break;
+                }
+
+                document.getElementById('w-desc').innerHTML = `<div class="temp">${temp}°</div><div class="desc-zh">${descZh}</div><div class="desc-en">${descEn}</div>`;
+                document.getElementById('w-icon').innerText = icon;
+            } catch (error) {}
+        }
+        fetchWeather();
+        setInterval(fetchWeather, 1800000);
+    </script>
+</body>
+</html>
