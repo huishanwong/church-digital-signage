@@ -51,8 +51,7 @@ This project is licensed under the [MIT License](LICENSE). Feel free to use, mod
 點擊下方圖片即可觀看 YouTube 操作示範影片：
 
 ### 1. 系統功能示範 (Feature Demonstration)
-[![教會數位看板功能示範](https://github.com/user-attachments/assets/d4d0274b-39ec-4441-922e-d193e828532b>
-)](https://www.youtube.com/watch?v=uKgc8gPfeaE)
+[![教會數位看板功能示範](https://github.com/user-attachments/assets/d4d0274b-39ec-4441-922e-d193e828532b)](https://www.youtube.com/watch?v=uKgc8gPfeaE)
 
 ### 2. 後台與設定示範 (Setup & Configuration Guide)
 [![教會數位看板設定示範](<img width="1365" height="768" alt="Demo2" src="https://github.com/user-attachments/assets/eb90b5dd-2584-4fc6-8b0b-fdb3a5ae5bbc" />
